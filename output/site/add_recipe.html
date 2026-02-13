@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Добавить рецепт</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #fdf6f0;
+      color: #333;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    h1 {
+      color: #8b4513;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: bold;
+      color: #555;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 16px;
+    }
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+    .btn {
+      background: #a67c52;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .btn:hover {
+      background: #8b4513;
+    }
+    .instructions {
+      background: #fffaf5;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 20px;
+      font-size: 0.95em;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>➕ Добавить новый рецепт</h1>
+  </header>
+
+  <form id="recipeForm">
+    <div class="form-group">
+      <label for="name">Название рецепта *</label>
+      <input type="text" id="name" required>
+    </div>
+
+    <div class="form-group">
+      <label for="category">Категория</label>
+      <select id="category">
+        <option>Горячее копчение</option>
+        <option>Холодное копчение</option>
+        <option>Засолка</option>
+        <option>Маринады</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="prep_time">Время подготовки (минуты) *</label>
+      <input type="number" id="prep_time" value="120" min="0" required>
+    </div>
+
+    <div class="form-group">
+      <label for="cook_time">Время копчения (минуты) *</label>
+      <input type="number" id="cook_time" value="60" min="0" required>
+    </div>
+
+    <div class="form-group">
+      <label for="temp_range">Температура копчения</label>
+      <input type="text" id="temp_range" placeholder="80–120°C">
+    </div>
+
+    <div class="form-group">
+      <label for="servings">Порции</label>
+      <input type="text" id="servings" placeholder="4–6 порций">
+    </div>
+
+    <div class="form-group">
+      <label for="ingredients">Ингредиенты (разделяйте точкой с запятой ;)</label>
+      <textarea id="ingredients" placeholder="Свиная грудинка — 1.5 кг; Соль — 4 ст.л.; ..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="instructions">Пошаговый рецепт (сохраняйте нумерацию: 1. ... 2. ...)</label>
+      <textarea id="instructions" placeholder="1. Промойте мясо...&#10;2. Приготовьте рассол..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="photo">Путь к фото (относительно папки проекта)</label>
+      <input type="text" id="photo" placeholder="photos/my_recipe.jpg">
+    </div>
+
+    <button type="submit" class="btn">Сохранить в CSV</button>
+  </form>
+
+  <div class="instructions">
+    <p><strong>💡 Инструкция:</strong></p>
+    <ul>
+      <li>После нажатия "Сохранить" данные добавятся в файл <code>recipes.csv</code></li>
+      <li>Затем запустите <code>python generate_site.py</code>, чтобы обновить PDF и сайт</li>
+      <li>Фото должно находиться в папке проекта (например, <code>photos/</code>)</li>
+    </ul>
+  </div>
+
+  <script>
+    document.getElementById('recipeForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const fields = ['name', 'category', 'prep_time', 'cook_time', 'temp_range', 'ingredients', 'instructions', 'servings', 'photo'];
+      const data = {};
+      for (let field of fields) {
+        data[field] = document.getElementById(field).value.trim();
+      }
+
+      // Формируем строку CSV
+      const csvLine = fields.map(f => {
+        let val = data[f].replace(/"/g, '""'); // экранируем кавычки
+        return `"${val}"`;
+      }).join(',');
+
+      // Отправляем на сервер (в нашем случае — просто показываем)
+      alert('Данные готовы к сохранению:\\n\\n' + csvLine + '\\n\\nВ реальном приложении они бы добавились в recipes.csv');
+
+      // В учебном проекте — просто выводим в консоль
+      console.log('Добавить в recipes.csv:');
+      console.log(csvLine);
+    });
+  </script>
+</body>
+</html>

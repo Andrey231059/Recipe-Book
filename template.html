@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ name }}</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 30px;
+      background-color: #fdf6f0;
+      color: #333;
+    }
+    .recipe-header {
+      text-align: center;
+      border-bottom: 3px solid #d4a574;
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+    h1 {
+      color: #8b4513;
+      font-size: 28px;
+      margin: 0;
+    }
+    .meta {
+      color: #6b5b4b;
+      font-style: italic;
+      margin: 8px 0;
+    }
+    .photo-container {
+      text-align: center;
+      margin: 20px 0 30px;
+    }
+    .recipe-photo {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: block;
+      margin: 0 auto;
+    }
+    .section {
+      margin: 25px 0;
+    }
+    h2 {
+      color: #a67c52;
+      border-left: 4px solid #c19a6b;
+      padding-left: 10px;
+    }
+    ul {
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .instructions-text {
+      white-space: pre-line;
+      line-height: 1.7;
+      padding: 12px;
+      background-color: #fffaf5;
+      border-radius: 6px;
+      border-left: 3px solid #e07a5f;
+    }
+    .highlight {
+      background-color: #fff8e1;
+      padding: 3px 6px;
+      border-radius: 3px;
+      font-weight: bold;
+    }
+    .no-photo {
+      color: #888;
+      font-style: italic;
+      text-align: center;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="recipe-header">
+    <h1>{{ name }}</h1>
+    <div class="meta">{{ category }}</div>
+    <div class="meta">Подготовка: {{ prep_time }} мин • Копчение: {{ cook_time }} мин • Температура: <span class="highlight">{{ temp_range }}</span></div>
+    <div class="meta">Порции: {{ servings }}</div>
+  </div>
+
+  <!-- Фото -->
+  <div class="photo-container">
+    {% if photo_data_uri %}
+      <img src="{{ photo_data_uri }}" alt="Фото: {{ name }}" class="recipe-photo">
+    {% else %}
+      <div class="no-photo">📸 Фото не прикреплено</div>
+    {% endif %}
+  </div>
+
+  <!-- Ингредиенты -->
+  <div class="section">
+    <h2>Ингредиенты</h2>
+    <ul>
+      {% for item in ingredients_list %}
+      <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Инструкции -->
+  <div class="section">
+    <h2>Пошаговый рецепт</h2>
+    <div class="instructions-text">{{ instructions_raw }}</div>
+  </div>
+
+  <div style="margin-top: 40px; font-size: 0.9em; color: #777; text-align: center;">
+    Сгенерировано автоматически • Кулинарная книга домашнего копчения
+  </div>
+</body>
+</html>

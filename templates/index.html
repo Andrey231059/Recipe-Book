@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Книга рецептов горячего копчения</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #fdf6f0;
+      color: #333;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding-bottom: 15px;
+      border-bottom: 3px solid #d4a574;
+    }
+    .recipe-card {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 25px;
+      padding: 15px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .recipe-image {
+      width: 120px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+    .recipe-info {
+      flex: 1;
+    }
+    .recipe-title {
+      color: #8b4513;
+      margin: 0 0 8px 0;
+      font-size: 18px;
+    }
+    .recipe-meta {
+      color: #6b5b4b;
+      font-size: 0.9em;
+      margin-bottom: 10px;
+    }
+    .recipe-actions a {
+      display: inline-block;
+      margin-right: 15px;
+      color: #a67c52;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .recipe-actions a:hover {
+      text-decoration: underline;
+    }
+    .no-photo-placeholder {
+      width: 120px;
+      height: 120px;
+      background: #eee;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #888;
+      font-size: 12px;
+      text-align: center;
+    }
+    footer {
+      margin-top: 40px;
+      text-align: center;
+      color: #777;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📚 Книга рецептов горячего копчения</h1>
+    <p><a href="add_recipe.html" style="color: #a67c52; font-weight: bold;">➕ Добавить новый рецепт</a></p>
+  </header>
+
+  {% for recipe in recipes %}
+  <div class="recipe-card">
+    {% if recipe.photo_data_uri %}
+      <img src="{{ recipe.photo_data_uri }}" alt="{{ recipe.name }}" class="recipe-image">
+    {% else %}
+      <div class="no-photo-placeholder">📸 Нет фото</div>
+    {% endif %}
+
+    <div class="recipe-info">
+      <h2 class="recipe-title">{{ recipe.name }}</h2>
+      <div class="recipe-meta">
+        {{ recipe.category }} • {{ recipe.prep_time_formatted }} мин подготовки • {{ recipe.cook_time }} мин копчения
+      </div>
+      <div class="recipe-actions">
+         <a href="../pdfs/recipe_{{ recipe.index }}_{{ recipe.safe_name_50 }}.pdf" target="_blank">📄 PDF</a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <footer>
+    Сгенерировано автоматически • {{ recipes|length }} рецептов
+  </footer>
+</body>
+</html>
