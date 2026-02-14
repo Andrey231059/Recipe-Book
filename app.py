@@ -1,220 +1,346 @@
 import os
 import csv
 import subprocess
-from flask import Flask, request, render_template_string, redirect, url_for
+import base64
+from flask import Flask, request, render_template_string, send_file
 
 app = Flask(__name__)
 CSV_FILE = 'recipes.csv'
 
-# HTML-форма (встроенная, без внешних файлов)
+
+# --- Вспомогательные функции ---
+def read_recipes():
+    """Читает рецепты и добавляет photo_data_uri и prep_time_formatted"""
+    if not os.path.isfile(CSV_FILE):
+        return []
+
+    recipes = []
+    project_root = os.path.abspath('.')
+    with open(CSV_FILE, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for i, row in enumerate(reader, 1):
+            # Форматируем время подготовки
+            try:
+                mins = int(row.get('prep_time', '0'))
+                if mins < 60:
+                    prep_fmt = f"{mins} мин"
+                elif mins < 1440:
+                    h = mins // 60
+                    m = mins % 60
+                    prep_fmt = f"{h} ч" + (f" {m} мин" if m else "")
+                else:
+                    d = mins // 1440
+                    h = (mins % 1440) // 60
+                    prep_fmt = f"{d} сут."
+                    if h: prep_fmt += f" {h} ч"
+            except:
+                prep_fmt = row.get('prep_time', '')
+
+            # Фото (base64)
+            photo_path = row.get('photo', '').strip()
+            photo_data_uri = None
+            if photo_path:
+                full_path = os.path.abspath(os.path.join(project_root, photo_path))
+                if os.path.isfile(full_path):
+                    try:
+                        with open(full_path, "rb") as img_file:
+                            encoded = base64.b64encode(img_file.read()).decode('utf-8')
+                            ext = os.path.splitext(full_path)[1][1:].lower()
+                            if ext == 'jpg': ext = 'jpeg'
+                            photo_data_uri = f"data:image/{ext};base64,{encoded}"
+                    except:
+                        pass
+
+            recipes.append({
+                **row,
+                'index': i,
+                'prep_time_formatted': prep_fmt,
+                'photo_data_uri': photo_data_uri
+            })
+    return recipes
+
+
+def write_recipes(recipes):
+    if not recipes:
+        return
+    fieldnames = recipes[0].keys()
+    # Убираем служебные поля
+    clean_fieldnames = [k for k in fieldnames if k not in ('index', 'prep_time_formatted', 'photo_data_uri')]
+    with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=clean_fieldnames)
+        writer.writeheader()
+        for r in recipes:
+            clean_r = {k: v for k, v in r.items() if k in clean_fieldnames}
+            writer.writerow(clean_r)
+
+
+def backup_csv():
+    if os.path.isfile(CSV_FILE):
+        with open(CSV_FILE, 'rb') as src, open(CSV_FILE + '.bak', 'wb') as dst:
+            dst.write(src.read())
+
+
+# --- HTML-шаблоны ---
+HOME_HTML = '''
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Книга рецептов</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #fdf6f0; }
+    .header { text-align: center; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 2px solid #d4a574; }
+    .btn { display: inline-block; background: #a67c52; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin: 10px; }
+    .btn:hover { background: #8b4513; }
+    .recipe-list { margin-top: 20px; }
+    .recipe-item { 
+      padding: 15px; 
+      margin: 12px 0; 
+      background: white; 
+      border-radius: 10px; 
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+    .recipe-img {
+      width: 100px;
+      height: 100px;
+      object-fit: cover;
+      border-radius: 8px;
+      background: #eee;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #888;
+      font-size: 12px;
+    }
+    .recipe-info { flex: 1; }
+    .recipe-title { font-weight: bold; color: #8b4513; font-size: 18px; margin-bottom: 6px; }
+    .recipe-meta { color: #666; font-size: 0.95em; margin-bottom: 10px; }
+    .recipe-actions a { 
+      margin-right: 15px; 
+      color: #1a73e8; 
+      text-decoration: none; 
+      font-weight: bold;
+    }
+    .recipe-actions a:hover { text-decoration: underline; }
+    .no-recipes { text-align: center; color: #888; margin-top: 30px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📚 Книга рецептов горячего копчения</h1>
+    <a href="/add" class="btn">➕ Добавить рецепт</a>
+  </div>
+
+  {% if recipes %}
+    <div class="recipe-list">
+      {% for recipe in recipes %}
+      <div class="recipe-item">
+        {% if recipe.photo_data_uri %}
+          <img src="{{ recipe.photo_data_uri }}" alt="{{ recipe.name }}" class="recipe-img">
+        {% else %}
+          <div class="recipe-img">📷 Нет фото</div>
+        {% endif %}
+
+        <div class="recipe-info">
+          <div class="recipe-title">{{ recipe.index }}. {{ recipe.name }}</div>
+          <div class="recipe-meta">
+            {{ recipe.category }} • Подготовка: {{ recipe.prep_time_formatted }} • Копчение: {{ recipe.cook_time }} мин
+          </div>
+          <div class="recipe-actions">
+            <a href="/pdf/{{ recipe.index }}" target="_blank">📄 PDF</a>
+            <a href="/edit/{{ recipe.index }}">✏️ Изменить</a>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="no-recipes">
+      Пока нет рецептов. <a href="/add" style="color:#a67c52;">Добавьте первый!</a>
+    </div>
+  {% endif %}
+</body>
+</html>
+'''
+
 FORM_HTML = '''
 <!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Добавить рецепт</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ 'Редактировать' if recipe else 'Добавить' }} рецепт</title>
   <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      max-width: 700px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: #fdf6f0;
-      color: #333;
-    }
-    h1 {
-      color: #8b4513;
-      text-align: center;
-    }
-    .form-group {
-      margin-bottom: 20px;
-    }
-    label {
-      display: block;
-      margin-bottom: 6px;
-      font-weight: bold;
-      color: #555;
-    }
-    input, textarea, select {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      font-family: inherit;
-      font-size: 16px;
-    }
-    textarea {
-      min-height: 100px;
-      resize: vertical;
-    }
-    .btn {
-      background: #a67c52;
-      color: white;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 16px;
-      font-weight: bold;
-      width: 100%;
-    }
-    .btn:hover {
-      background: #8b4513;
-    }
-    .back-link {
-      display: inline-block;
-      margin-top: 20px;
-      color: #a67c52;
-      text-decoration: none;
-    }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background: #fdf6f0; }
+    h1 { color: #8b4513; text-align: center; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; margin-bottom: 6px; font-weight: bold; color: #555; }
+    input, textarea, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; font-size: 16px; }
+    textarea { min-height: 100px; resize: vertical; }
+    .btn { background: #a67c52; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; }
+    .btn:hover { background: #8b4513; }
+    .back-link { display: inline-block; margin-top: 20px; color: #a67c52; text-decoration: none; }
   </style>
 </head>
 <body>
-  <h1>➕ Добавить новый рецепт</h1>
+  <h1>{{ '✏️ Редактировать рецепт' if recipe else '➕ Добавить рецепт' }}</h1>
 
   <form method="POST">
+    <input type="hidden" name="index" value="{{ recipe.index if recipe else '' }}">
+
     <div class="form-group">
-      <label for="name">Название рецепта *</label>
-      <input type="text" id="name" name="name" required>
+      <label>Название *</label>
+      <input type="text" name="name" value="{{ recipe.name if recipe else '' }}" required>
     </div>
 
     <div class="form-group">
-      <label for="category">Категория</label>
-      <select id="category" name="category">
-        <option>Горячее копчение</option>
-        <option>Холодное копчение</option>
-        <option>Засолка</option>
-        <option>Маринады</option>
+      <label>Категория</label>
+      <select name="category">
+        {% for cat in ['Горячее копчение', 'Холодное копчение', 'Засолка', 'Маринады'] %}
+          <option {% if cat == (recipe.category if recipe else 'Горячее копчение') %}selected{% endif %}>{{ cat }}</option>
+        {% endfor %}
       </select>
     </div>
 
     <div class="form-group">
-      <label for="prep_time">Время подготовки (минуты) *</label>
-      <input type="number" id="prep_time" name="prep_time" value="120" min="0" required>
-      <small>Например: 30 (мин), 120 (2 ч), 1440 (1 сут.)</small>
+      <label>Подготовка (мин)</label>
+      <input type="number" name="prep_time" value="{{ recipe.prep_time if recipe else '120' }}" min="0" required>
     </div>
 
     <div class="form-group">
-      <label for="cook_time">Время копчения (минуты) *</label>
-      <input type="number" id="cook_time" name="cook_time" value="60" min="0" required>
+      <label>Копчение (мин)</label>
+      <input type="number" name="cook_time" value="{{ recipe.cook_time if recipe else '60' }}" min="0" required>
     </div>
 
     <div class="form-group">
-      <label for="temp_range">Температура копчения</label>
-      <input type="text" id="temp_range" name="temp_range" placeholder="80–120°C">
+      <label>Температура</label>
+      <input type="text" name="temp_range" value="{{ recipe.temp_range if recipe else '' }}" placeholder="80–120°C">
     </div>
 
     <div class="form-group">
-      <label for="servings">Порции</label>
-      <input type="text" id="servings" name="servings" placeholder="4–6 порций">
+      <label>Порции</label>
+      <input type="text" name="servings" value="{{ recipe.servings if recipe else '' }}" placeholder="4–6 порций">
     </div>
 
     <div class="form-group">
-      <label for="ingredients">Ингредиенты (разделяйте ;)</label>
-      <textarea id="ingredients" name="ingredients" placeholder="Свиная грудинка — 1.5 кг; Соль — 4 ст.л.; ..."></textarea>
+      <label>Ингредиенты (;)</label>
+      <textarea name="ingredients">{{ recipe.ingredients if recipe else '' }}</textarea>
     </div>
 
     <div class="form-group">
-      <label for="instructions">Пошаговый рецепт (сохраняйте нумерацию: 1. ... 2. ...)</label>
-      <textarea id="instructions" name="instructions" placeholder="1. Промойте мясо...&#10;2. Приготовьте рассол..."></textarea>
+      <label>Рецепт</label>
+      <textarea name="instructions">{{ recipe.instructions if recipe else '' }}</textarea>
     </div>
 
     <div class="form-group">
-      <label for="photo">Путь к фото (относительно проекта)</label>
-      <input type="text" id="photo" name="photo" placeholder="photos/my_recipe.jpg">
+      <label>Фото (путь)</label>
+      <input type="text" name="photo" value="{{ recipe.photo if recipe else '' }}" placeholder="photos/my.jpg">
     </div>
 
-    <button type="submit" class="btn">✅ Добавить рецепт и обновить сайт</button>
+    <button type="submit" class="btn">{{ '💾 Сохранить' if recipe else '✅ Добавить' }}</button>
   </form>
 
-  <a href="/preview" class="back-link">← Посмотреть список рецептов</a>
+  <a href="/" class="back-link">← Назад к списку</a>
 </body>
 </html>
 '''
 
-SUCCESS_HTML = '''
+SUCCESS_REDIRECT = '''
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Успех!</title>
-  <style>
-    body { font-family: sans-serif; text-align: center; padding: 50px; background: #e8f5e9; }
-    h2 { color: #2e7d32; }
-    a { color: #1b5e20; text-decoration: underline; margin-top: 20px; display: inline-block; }
-  </style>
-</head>
-<body>
-  <h2>✅ Рецепт успешно добавлен!</h2>
-  <p><strong>{{ name }}</strong></p>
-  <p>PDF и сайт обновлены.</p>
-  <a href="/">Добавить ещё</a> • 
-  <a href="/preview">Посмотреть список</a>
+<html>
+<head><meta charset="utf-8"><meta http-equiv="refresh" content="1;url=/"></head>
+<body style="text-align:center; padding:50px; font-family:sans-serif;">
+  <h2>✅ {{ message }}</h2>
+  <p>Перенаправление на главную...</p>
 </body>
 </html>
 '''
 
 
+# --- Маршруты ---
 @app.route('/')
-def index():
+def home():
+    recipes = read_recipes()
+    return render_template_string(HOME_HTML, recipes=recipes)
+
+
+@app.route('/add')
+def add_form():
     return render_template_string(FORM_HTML)
 
 
-@app.route('/', methods=['POST'])
+@app.route('/add', methods=['POST'])
 def add_recipe():
-    # Получаем данные
-    data = {
-        'name': request.form.get('name', '').strip(),
-        'category': request.form.get('category', 'Горячее копчение').strip(),
-        'prep_time': request.form.get('prep_time', '120').strip(),
-        'cook_time': request.form.get('cook_time', '60').strip(),
-        'temp_range': request.form.get('temp_range', '').strip(),
-        'ingredients': request.form.get('ingredients', '').strip(),
-        'instructions': request.form.get('instructions', '').strip(),
-        'servings': request.form.get('servings', '').strip(),
-        'photo': request.form.get('photo', '').strip(),
-    }
-
-    if not data['name']:
+    backup_csv()
+    data = {k: v.strip() for k, v in request.form.items()}
+    if not data.get('name'):
         return "❌ Название обязательно!", 400
 
-    # Записываем в CSV
-    fieldnames = ['name', 'category', 'prep_time', 'cook_time', 'temp_range',
-                  'ingredients', 'instructions', 'servings', 'photo']
+    recipes = read_recipes()
+    # Удаляем служебные поля перед сохранением
+    clean_data = {k: v for k, v in data.items() if k != 'index'}
+    recipes.append(clean_data)
+    write_recipes(recipes)
 
-    file_exists = os.path.isfile(CSV_FILE)
-    with open(CSV_FILE, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(data)
-
-    # Перегенерируем сайт и PDF
     try:
         subprocess.run(['python', 'generate_site.py'], check=True, cwd=os.getcwd())
     except Exception as e:
-        print(f"⚠️ Ошибка при генерации: {e}")
+        print(f"⚠️ Ошибка генерации: {e}")
 
-    return render_template_string(SUCCESS_HTML, name=data['name'])
+    return render_template_string(SUCCESS_REDIRECT, message="Рецепт добавлен!")
 
 
-@app.route('/preview')
-def preview():
-    abs_path = os.path.abspath('output/site/index.html')
-    return f'''
-    <!DOCTYPE html>
-    <html>
-    <head><meta charset="utf-8"><title>Список рецептов</title></head>
-    <body style="padding: 20px; font-family: sans-serif;">
-      <h2>📚 Список рецептов</h2>
-      <p>Откройте в браузере:</p>
-      <p><code>{abs_path}</code></p>
-      <p><a href="file://{abs_path}" target="_blank">👉 Открыть сейчас</a></p>
-      <p><a href="/">← Назад</a></p>
-    </body>
-    </html>
-    '''
+@app.route('/edit/<int:index>')
+def edit_form(index):
+    recipes = read_recipes()
+    if index < 1 or index > len(recipes):
+        return "Рецепт не найден", 404
+    recipe = recipes[index - 1]
+    return render_template_string(FORM_HTML, recipe=recipe)
+
+
+@app.route('/edit/<int:index>', methods=['POST'])
+def update_recipe(index):
+    backup_csv()
+    recipes = read_recipes()
+    if index < 1 or index > len(recipes):
+        return "Рецепт не найден", 404
+
+    data = {k: v.strip() for k, v in request.form.items()}
+    if not data.get('name'):
+        return "❌ Название обязательно!", 400
+
+    # Обновляем только данные, без служебных полей
+    clean_data = {k: v for k, v in data.items() if k != 'index'}
+    recipes[index - 1] = {**recipes[index - 1], **clean_data}
+    write_recipes(recipes)
+
+    try:
+        subprocess.run(['python', 'generate_site.py'], check=True, cwd=os.getcwd())
+    except Exception as e:
+        print(f"⚠️ Ошибка генерации: {e}")
+
+    return render_template_string(SUCCESS_REDIRECT, message="Рецепт обновлён!")
+
+
+@app.route('/pdf/<int:index>')
+def serve_pdf(index):
+    recipes = read_recipes()
+    if index < 1 or index > len(recipes):
+        return "PDF не найден", 404
+
+    recipe = recipes[index - 1]
+    safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in recipe['name'])
+    safe_name_50 = safe_name.replace(' ', '_')[:50]
+    pdf_filename = f"recipe_{index}_{safe_name_50}.pdf"
+    pdf_path = os.path.join('output', 'pdfs', pdf_filename)
+
+    if not os.path.isfile(pdf_path):
+        return f"Файл не найден: {pdf_path}", 404
+
+    return send_file(pdf_path, as_attachment=False)
 
 
 if __name__ == '__main__':
